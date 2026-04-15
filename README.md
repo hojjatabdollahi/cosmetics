@@ -12,3 +12,6 @@ Cool widgets for [libcosmic](https://github.com/pop-os/libcosmic).
 
 - **Range Slider** 
 <img width="916" height="462" alt="Image" src="https://github.com/user-attachments/assets/12008c06-b9c0-4068-92ee-0ae69318472b" />
+
+- **Scrubber**
+<img width="926" height="312" alt="Image" src="https://github.com/user-attachments/assets/1db01c28-cf87-45da-bd58-df9e7616b4c8" />
