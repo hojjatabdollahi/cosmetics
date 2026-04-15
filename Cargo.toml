@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 default = []
+gif-player = ["dep:image_crate"]
 image-container = ["dep:bytemuck", "dep:tokio", "dep:image_crate", "dep:iced_wgpu", "dep:libblur"]
 
 [dependencies]
@@ -32,6 +33,10 @@ optional = true
 git = "https://github.com/pop-os/libcosmic"
 package = "iced_wgpu"
 optional = true
+
+[[example]]
+name = "gif-player"
+required-features = ["gif-player"]
 
 [[example]]
 name = "image-container"

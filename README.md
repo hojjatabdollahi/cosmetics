@@ -21,3 +21,6 @@ Cool widgets for [libcosmic](https://github.com/pop-os/libcosmic).
 
 - **Image Container** - (behind a feature gate) rounded corners, and blurred background image
 <img width="928" height="360" alt="Image" src="https://github.com/user-attachments/assets/e9d23099-baf5-482a-b516-ad7b9afeb0a3" />
+
+- **Gif Player**
+<img width="894" height="466" alt="Image" src="https://github.com/user-attachments/assets/8ce28e95-f333-41f2-ac7f-aceb774e1b09" />
