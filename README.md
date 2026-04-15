@@ -15,3 +15,6 @@ Cool widgets for [libcosmic](https://github.com/pop-os/libcosmic).
 
 - **Scrubber**
 <img width="926" height="312" alt="Image" src="https://github.com/user-attachments/assets/1db01c28-cf87-45da-bd58-df9e7616b4c8" />
+
+- **Flex Row** - with ability to reorder
+<img width="964" height="508" alt="Image" src="https://github.com/user-attachments/assets/f80d716c-c57b-4062-a800-1e84165a2c06" />
