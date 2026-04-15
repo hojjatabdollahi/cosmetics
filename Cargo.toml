@@ -3,8 +3,39 @@ name = "cosmetics"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+image-container = ["dep:bytemuck", "dep:tokio", "dep:image_crate", "dep:iced_wgpu", "dep:libblur"]
+
 [dependencies]
 num-traits = "0.2"
+libblur = { version = "0.23", optional = true }
+
+[dependencies.bytemuck]
+version = "1"
+features = ["derive"]
+optional = true
+
+[dependencies.tokio]
+version = "1"
+features = ["rt-multi-thread"]
+optional = true
+
+[dependencies.image_crate]
+package = "image"
+version = "0.25"
+default-features = false
+features = ["png", "jpeg", "gif"]
+optional = true
+
+[dependencies.iced_wgpu]
+git = "https://github.com/pop-os/libcosmic"
+package = "iced_wgpu"
+optional = true
+
+[[example]]
+name = "image-container"
+required-features = ["image-container"]
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic"

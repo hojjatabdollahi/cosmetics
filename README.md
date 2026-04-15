@@ -18,3 +18,6 @@ Cool widgets for [libcosmic](https://github.com/pop-os/libcosmic).
 
 - **Flex Row** - with ability to reorder
 <img width="964" height="508" alt="Image" src="https://github.com/user-attachments/assets/f80d716c-c57b-4062-a800-1e84165a2c06" />
+
+- **Image Container** - (behind a feature gate) rounded corners, and blurred background image
+<img width="928" height="360" alt="Image" src="https://github.com/user-attachments/assets/e9d23099-baf5-482a-b516-ad7b9afeb0a3" />
