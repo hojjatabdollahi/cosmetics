@@ -9,3 +9,6 @@ Cool widgets for [libcosmic](https://github.com/pop-os/libcosmic).
 
 - **Spinner** - just a spinner, spinning. (`libcosmic` now has a circular progressbar that you can use instead of this)
 <img width="930" height="416" alt="Image" src="https://github.com/user-attachments/assets/03945404-96fe-4d97-99ad-5c7361145ff7" />
+
+- **Range Slider** 
+<img width="916" height="462" alt="Image" src="https://github.com/user-attachments/assets/12008c06-b9c0-4068-92ee-0ae69318472b" />
