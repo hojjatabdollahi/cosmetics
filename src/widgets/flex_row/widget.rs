@@ -128,6 +128,7 @@ where
     pending_drag: Option<PendingDragState<Key>>,
     drag: Option<DragState<Key>>,
     wrap_width: f32,
+    initialized: bool,
 }
 
 impl<Key> Default for State<Key>
@@ -141,6 +142,7 @@ where
             pending_drag: None,
             drag: None,
             wrap_width: f32::INFINITY,
+            initialized: false,
         }
     }
 }
@@ -194,6 +196,19 @@ where
             .entry(key.clone())
             .or_insert_with(|| SlotAnimation::new(target))
             .retarget(target, duration);
+    }
+
+    fn snap_slot(&mut self, key: &Key, target: Point) {
+        self.slot_positions
+            .insert(key.clone(), SlotAnimation::new(target));
+    }
+
+    fn apply_layout_position(&mut self, key: &Key, target: Point, duration: Duration) {
+        if self.initialized {
+            self.retarget_slot(key, target, duration);
+        } else {
+            self.snap_slot(key, target);
+        }
     }
 }
 
@@ -395,7 +410,7 @@ where
             )
         }) else {
             for slot in slots {
-                state.retarget_slot(
+                state.apply_layout_position(
                     &slot.key,
                     Point::new(slot.bounds.x, slot.bounds.y),
                     self.animation_duration,
@@ -409,7 +424,7 @@ where
         let Some(dragged_slot) = slots.iter().find(|slot| slot.key == drag_key) else {
             state.drag = None;
             for slot in slots {
-                state.retarget_slot(
+                state.apply_layout_position(
                     &slot.key,
                     Point::new(slot.bounds.x, slot.bounds.y),
                     self.animation_duration,
@@ -625,6 +640,7 @@ where
         let child_layouts: Vec<_> = layout.children().collect();
 
         if let Event::Window(cosmic::iced::window::Event::RedrawRequested(_)) = event {
+            state.initialized = true;
             state.finish_animations(self.animation_duration);
             if state.drag.is_some() || state.is_animating(self.animation_duration) {
                 shell.request_redraw();
