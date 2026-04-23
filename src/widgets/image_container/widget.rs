@@ -12,7 +12,6 @@ use iced_wgpu::primitive;
 
 use super::rounded_primitive::RoundedImagePrimitive;
 
-
 /// A container that draws an image as its background.
 ///
 /// The image is drawn to fill the container's bounds without affecting the
@@ -40,7 +39,6 @@ where
     overlay_color: Color,
     overlay_opacity: f32,
 }
-
 
 impl<'a, Message, Theme, Renderer> ImageContainer<'a, Message, Theme, Renderer>
 where
@@ -96,7 +94,6 @@ where
         self
     }
 }
-
 
 impl<'a, Message, Theme, Renderer> core::Widget<Message, Theme, Renderer>
     for ImageContainer<'a, Message, Theme, Renderer>
@@ -443,7 +440,6 @@ where
         )
     }
 }
-
 
 impl<'a, Message> From<ImageContainer<'a, Message>>
     for Element<'a, Message, cosmic::Theme, cosmic::Renderer>

@@ -84,9 +84,7 @@ impl Application for App {
                 .height(Length::Shrink)
                 .align_y(Alignment::Start)
                 .drag_lift(10.0),
-            |row, &(id, icon_name, label)| {
-                row.push(id, icon_tile(icon_name, label))
-            },
+            |row, &(id, icon_name, label)| row.push(id, icon_tile(icon_name, label)),
         );
 
         widget::container(
@@ -124,9 +122,7 @@ impl Application for App {
 fn icon_tile<'a>(icon_name: &'a str, label: &'a str) -> cosmic::Element<'a, Message> {
     widget::container(
         widget::column::with_children(vec![
-            widget::icon::from_name(icon_name)
-                .size(32)
-                .into(),
+            widget::icon::from_name(icon_name).size(32).into(),
             widget::text::caption(label).into(),
         ])
         .spacing(4)

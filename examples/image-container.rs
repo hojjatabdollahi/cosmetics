@@ -135,14 +135,10 @@ impl Application for App {
     fn view(&self) -> Element<'_, Self::Message> {
         let (handle, opacity) = match self.mode {
             Mode::Original => (self.original.clone(), 1.0_f32),
-            Mode::Blurred => (
-                self.blurred.clone().or_else(|| self.original.clone()),
-                1.0,
-            ),
-            Mode::BlurredTranslucent => (
-                self.blurred.clone().or_else(|| self.original.clone()),
-                0.4,
-            ),
+            Mode::Blurred => (self.blurred.clone().or_else(|| self.original.clone()), 1.0),
+            Mode::BlurredTranslucent => {
+                (self.blurred.clone().or_else(|| self.original.clone()), 0.4)
+            }
             Mode::Translucent => (self.original.clone(), 0.4),
         };
 

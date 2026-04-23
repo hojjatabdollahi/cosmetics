@@ -7,6 +7,7 @@ edition = "2024"
 default = []
 gif-player = ["dep:image_crate"]
 image-container = ["dep:bytemuck", "dep:tokio", "dep:image_crate", "dep:iced_wgpu", "dep:libblur"]
+styled-text-renderer = ["dep:image_crate", "dep:libblur", "dep:cosmic-text"]
 
 [dependencies]
 num-traits = "0.2"
@@ -34,6 +35,10 @@ git = "https://github.com/pop-os/libcosmic"
 package = "iced_wgpu"
 optional = true
 
+[dependencies.cosmic-text]
+git = "https://github.com/pop-os/cosmic-text.git"
+optional = true
+
 [[example]]
 name = "gif-player"
 required-features = ["gif-player"]
@@ -41,6 +46,10 @@ required-features = ["gif-player"]
 [[example]]
 name = "image-container"
 required-features = ["image-container"]
+
+[[example]]
+name = "styled-text-renderer"
+required-features = ["styled-text-renderer"]
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic"

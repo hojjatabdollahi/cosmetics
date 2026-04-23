@@ -29,7 +29,6 @@ use bytemuck::{Pod, Zeroable};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
-
 const SHADER: &str = r#"
 // We create our own render pass in render(), so the vertex shader must
 // position the quad explicitly using NDC coordinates from the uniforms.
@@ -150,7 +149,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 "#;
 
-
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Zeroable, Pod)]
 struct Uniforms {
@@ -167,7 +165,6 @@ struct Uniforms {
     border_color: [f32; 4],  // RGBA
     overlay_color: [f32; 4], // RGBA
 } // total: 96 bytes
-
 
 /// A GPU primitive that draws `handle` clipped to rounded corners.
 ///
@@ -190,7 +187,6 @@ pub struct RoundedImagePrimitive {
     /// Overlay opacity multiplier in [0,1].
     pub overlay_opacity: f32,
 }
-
 
 /// One prepared draw call , created in `prepare()`, consumed in `render()`.
 struct PreparedFrame {
@@ -581,7 +577,6 @@ impl RoundedImagePipeline {
     }
 }
 
-
 fn try_decode(handle: &iced_image::Handle) -> Option<(Vec<u8>, u32, u32)> {
     let rgba = match handle {
         iced_image::Handle::Path(_, path) => image_crate::open(path).ok()?.into_rgba8(),
@@ -611,7 +606,6 @@ fn handle_hash(handle: &iced_image::Handle) -> u64 {
     }
     h.finish()
 }
-
 
 impl primitive::Pipeline for RoundedImagePipeline {
     fn new(device: &wgpu::Device, _queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
