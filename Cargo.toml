@@ -6,12 +6,18 @@ edition = "2024"
 [features]
 default = []
 gif-player = ["dep:image_crate"]
-image-container = ["dep:bytemuck", "dep:tokio", "dep:image_crate", "dep:iced_wgpu", "dep:libblur"]
+image-container = [
+    "dep:bytemuck",
+    "dep:tokio",
+    "dep:image_crate",
+    "dep:iced_wgpu",
+    "dep:libblur",
+]
 styled-text-renderer = ["dep:image_crate", "dep:libblur", "dep:cosmic-text"]
 
 [dependencies]
 num-traits = "0.2"
-libblur = { version = "0.23", optional = true }
+libblur = { version = "0.24", optional = true }
 
 [dependencies.bytemuck]
 version = "1"
@@ -53,10 +59,4 @@ required-features = ["styled-text-renderer"]
 
 [dependencies.libcosmic]
 git = "https://github.com/pop-os/libcosmic"
-features = [
-  "dbus-config",
-  "tokio",
-  "winit",
-  "wayland",
-  "wgpu",
-]
+features = ["dbus-config", "tokio", "winit", "wayland", "wgpu"]
