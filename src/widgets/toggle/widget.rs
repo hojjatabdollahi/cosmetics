@@ -333,14 +333,20 @@ impl<'a, Msg: Clone + 'a> cosmic::widget::Widget<Msg, cosmic::Theme, cosmic::Ren
         let pos = state.position(target, self.duration);
         let (circle_cx, circle_cy) = self.circle_center(pos, bounds);
         let segment_len = self.effective_pill_length() / self.count() as f32;
+        let padding = (self.pill_thickness - self.circle_size) / 2.0;
+        let (head_w, head_h) = if self.is_vertical {
+            (self.circle_size, segment_len - 2.0 * padding)
+        } else {
+            (segment_len - 2.0 * padding, self.circle_size)
+        };
 
         renderer.fill_quad(
             Quad {
                 bounds: Rectangle {
-                    x: circle_cx - segment_len / 2.0,
-                    y: circle_cy - self.circle_size / 2.0,
-                    width: segment_len,
-                    height: self.circle_size,
+                    x: circle_cx - head_w / 2.0,
+                    y: circle_cy - head_h / 2.0,
+                    width: head_w,
+                    height: head_h,
                 },
                 border: Border {
                     radius: (self.circle_size / 2.0).into(),
@@ -363,10 +369,10 @@ impl<'a, Msg: Clone + 'a> cosmic::widget::Widget<Msg, cosmic::Theme, cosmic::Ren
             renderer.fill_quad(
                 Quad {
                     bounds: Rectangle {
-                        x: hx - segment_len / 2.0,
-                        y: hy - self.circle_size / 2.0,
-                        width: segment_len,
-                        height: self.circle_size,
+                        x: hx - head_w / 2.0,
+                        y: hy - head_h / 2.0,
+                        width: head_w,
+                        height: head_h,
                     },
                     border: Border {
                         radius: (self.circle_size / 2.0).into(),
