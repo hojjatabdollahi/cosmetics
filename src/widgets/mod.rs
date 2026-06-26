@@ -10,6 +10,7 @@ pub mod gif_player;
 pub mod image_container;
 pub mod range_slider;
 pub mod scroll_fisheye_row;
+pub mod scrub_spin;
 pub mod scrubber;
 pub mod spinner;
 pub mod toggle;
@@ -29,6 +30,7 @@ pub use image_container::{
 };
 pub use range_slider::{RangeSlider, range_slider};
 pub use scroll_fisheye_row::{ScrollFisheyeRow, scroll_fisheye_row};
+pub use scrub_spin::{ScrubSpin, scrub_spin};
 pub use scrubber::{Scrubber, scrubber};
 pub use spinner::{Spinner, SpinnerState};
 pub use toggle::{Toggle, toggle, toggle3};

@@ -175,19 +175,31 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer> for Cover
             self.active_clamped()
         };
 
+        // Card background: the theme window background, used to fill any
+        // fully-transparent margins of a thumbnail so they blend with the panel.
+        let card_bg = {
+            let c: Color = theme.cosmic().bg_color().into();
+            [c.r, c.g, c.b, 1.0]
+        };
+
         let cards = self
             .items
             .iter()
             .enumerate()
             .map(|(i, item)| CoverCard {
                 handle: item.handle.clone(),
-                tint: item.tint,
+                // Image cards: theme bg for transparent margins. Fallback cards:
+                // their own flat colour.
+                tint: if item.handle.is_some() {
+                    card_bg
+                } else {
+                    item.tint
+                },
                 d: i as f32 - scroll,
             })
             .collect();
 
         // Table: solid white floor under the cards.
-        let _ = theme;
         let table = if self.table {
             [1.0, 1.0, 1.0, 1.0]
         } else {

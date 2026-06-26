@@ -62,11 +62,11 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
     return out;
 }
 
-// All outputs are PREMULTIPLIED (rgb already scaled by alpha): the pipeline
-// uses premultiplied-alpha blending, and Wayland window buffers are themselves
-// premultiplied. This keeps each window's real transparency — transparent
-// regions stay transparent (the blur/table shows through) rather than being
-// forced opaque (which produced black) or composited onto white.
+// Outputs are PREMULTIPLIED (rgb scaled by the output alpha) to match the
+// pipeline's premultiplied-alpha blending. Card faces are drawn OPAQUE with the
+// window's de-premultiplied (true) colours, so their brightness no longer
+// depends on the (now opaque, dark) panel behind them. Fully-transparent margins
+// (rounded corners) are filled with the card background `tint` instead of black.
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let kind = u.params.z; // 0 card, 1 reflection, 2 floor/table
@@ -78,31 +78,37 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         return vec4<f32>(u.tint.rgb * a, a);
     }
 
-    var prgb: vec3<f32>; // premultiplied rgb
-    var alpha: f32;
+    var rgb: vec3<f32>;
     if u.params.y > 0.5 {
         let s = textureSample(t_img, s_img, u.uv_offset + in.uv * u.uv_scale);
-        prgb = s.rgb; // already premultiplied
-        alpha = s.a;
+        // De-premultiply to recover the window's true colours, even for
+        // low-alpha pixels (e.g. a translucent terminal's coloured background).
+        // Only pixels with neither alpha nor colour are treated as empty and
+        // filled with the card background, so transparent margins aren't black
+        // while a faint blue background still reads as blue.
+        let m = max(s.r, max(s.g, s.b));
+        if s.a < 0.004 && m < 0.004 {
+            rgb = u.tint.rgb;
+        } else {
+            rgb = s.rgb / max(s.a, 0.004);
+        }
     } else {
-        // Fallback: straight tint treated as opaque → premultiply.
-        prgb = u.tint.rgb * u.tint.a;
-        alpha = u.tint.a;
+        rgb = u.tint.rgb; // flat fallback colour
     }
 
     // Dim cards (darken) as they rotate away from the focal point.
-    prgb = prgb * u.params.w;
+    rgb = rgb * u.params.w;
 
     if kind > 0.5 {
         // Reflection: strongest at the top (touching the card), fading downward.
         let g = clamp(0.5 - in.ly * 0.5, 0.0, 1.0);
-        let f = u.params.x * g * g * 0.30;
-        return vec4<f32>(prgb * f, alpha * f);
+        let a = u.params.x * g * g * 0.30;
+        return vec4<f32>(rgb * a, a);
     }
 
-    // Card face: keep the window's real alpha (faded near the visible edge).
+    // Card face: opaque (premultiplied with alpha = the edge fade).
     let f = u.params.x;
-    return vec4<f32>(prgb * f, alpha * f);
+    return vec4<f32>(rgb * f, f);
 }
 "#;
 
