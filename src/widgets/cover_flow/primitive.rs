@@ -67,14 +67,71 @@ fn vs_main(@builtin(vertex_index) idx: u32) -> VsOut {
 // window's de-premultiplied (true) colours, so their brightness no longer
 // depends on the (now opaque, dark) panel behind them. Fully-transparent margins
 // (rounded corners) are filled with the card background `tint` instead of black.
+// Signed distance to a rounded rect centred at the origin (negative inside).
+fn rrect_sdf(p: vec2<f32>, half: vec2<f32>, r: f32) -> f32 {
+    let q = abs(p) - half + vec2<f32>(r, r);
+    return length(max(q, vec2<f32>(0.0, 0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
-    let kind = u.params.z; // 0 card, 1 reflection, 2 floor/table
+    let kind = u.params.z; // 0 card, 2 floor, 3 badge, 4 wall, 5 reflection composite
 
-    // Floor / table: a solid band filling the lower part with a hard top edge.
+    // Reflection composite: sample the pre-rendered mirror buffer (which already
+    // resolved card occlusion via depth, so overlaps never compound) and fade it
+    // into the floor — strongest at the floor line, vanishing toward the bottom.
+    if kind > 4.5 {
+        let s = textureSample(t_img, s_img, in.uv); // premultiplied mirror
+        let top = u.uv_scale.x;    // table top (focal card base)
+        let bottom = u.uv_scale.y; // where the reflection vanishes
+        let fade = clamp((bottom - in.uv.y) / (bottom - top), 0.0, 1.0);
+        let f = fade * 0.5;
+        return s * f;
+    }
+
+    // Wall: rounded-rect background with a radial spotlight — bright behind the
+    // focused (centre) card, fading to dark at the edges so the selection pops.
+    // For the wall and floor, uv_offset carries the widget pixel size and
+    // uv_scale.x the corner radius (px).
+    if kind > 3.5 {
+        let size = u.uv_offset;
+        let px = in.uv * size;
+        let d = rrect_sdf(px - size * 0.5, size * 0.5, u.uv_scale.x);
+        let mask = 1.0 - smoothstep(-0.75, 0.75, d); // rounded-rect coverage
+        let center = vec2<f32>(size.x * 0.5, size.y * 0.42);
+        let radius = size.x * 0.52;
+        let t = smoothstep(0.0, 1.0, clamp(length(px - center) / radius, 0.0, 1.0));
+        let rgb = mix(u.tint.rgb, u.tint.rgb * 0.30, t);
+        let a = u.tint.a * mask;
+        return vec4<f32>(rgb * a, a);
+    }
+
+    // Badge (app icon): already-premultiplied straight alpha, just faded.
+    if kind > 2.5 {
+        let s = textureSample(t_img, s_img, u.uv_offset + in.uv * u.uv_scale);
+        let f = u.params.x;
+        return vec4<f32>(s.rgb * f, s.a * f);
+    }
+
+    // Floor / table: solid band filling the lower part, hard top edge, with
+    // rounded bottom corners (matching the wall's bottom radius).
     if kind > 1.5 {
-        let g = step(0.55, 0.5 - in.ly * 0.5);
-        let a = u.tint.a * g;
+        let size = u.uv_offset;
+        let r = u.uv_scale.x;
+        let px = in.uv * size;
+        var a = u.tint.a * step(u.uv_scale.y, in.uv.y);
+        let cy = size.y - r;
+        if px.y > cy {
+            var dc = -1.0;
+            let lx = px.x;
+            let rx = size.x - px.x;
+            if lx < r {
+                dc = length(vec2<f32>(r - lx, px.y - cy)) - r;
+            } else if rx < r {
+                dc = length(vec2<f32>(r - rx, px.y - cy)) - r;
+            }
+            a = a * (1.0 - smoothstep(-0.75, 0.75, dc));
+        }
         return vec4<f32>(u.tint.rgb * a, a);
     }
 
@@ -99,14 +156,8 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Dim cards (darken) as they rotate away from the focal point.
     rgb = rgb * u.params.w;
 
-    if kind > 0.5 {
-        // Reflection: strongest at the top (touching the card), fading downward.
-        let g = clamp(0.5 - in.ly * 0.5, 0.0, 1.0);
-        let a = u.params.x * g * g * 0.30;
-        return vec4<f32>(rgb * a, a);
-    }
-
-    // Card face: opaque (premultiplied with alpha = the edge fade).
+    // Card face (and the mirrored cards rendered into the reflection buffer):
+    // opaque, so the reflection buffer resolves occlusion by depth.
     let f = u.params.x;
     return vec4<f32>(rgb * f, f);
 }
@@ -127,6 +178,8 @@ struct CardUniforms {
 pub struct CoverCard {
     /// `None` → render the flat `tint` fallback (window has no thumbnail yet).
     pub handle: Option<iced_image::Handle>,
+    /// Optional app-icon badge drawn at the card's bottom-centre.
+    pub badge: Option<iced_image::Handle>,
     pub tint: [f32; 4],
     /// Continuous offset from the focal point: `index - scroll`.
     pub d: f32,
@@ -136,27 +189,48 @@ pub struct CoverCard {
 pub struct CoverFlowPrimitive {
     pub cards: Vec<CoverCard>,
     pub reflection: bool,
-    /// Floor / table colour (RGBA, premultiplied-friendly straight colour).
-    /// Alpha 0 disables the floor.
+    /// Floor / table colour (straight RGBA). Alpha 0 disables the floor.
     pub table: [f32; 4],
+    /// Wall (background behind the cards) colour. Alpha 0 disables the wall.
+    pub wall: [f32; 4],
 }
 
-// 0 = card face, 1 = reflection, 2 = floor/table.
+// Shader params.z. (The mirrored cards rendered into the reflection buffer use
+// KIND_CARD too — they're just opaque cards.) PreparedCard.kind (u8) groups
+// draws into passes: 1 = the reflection buffer's mirrored cards.
 const KIND_CARD: f32 = 0.0;
-const KIND_REFLECTION: f32 = 1.0;
 const KIND_FLOOR: f32 = 2.0;
+const KIND_BADGE: f32 = 3.0;
+const KIND_WALL: f32 = 4.0;
+const KIND_REFLECTION_COMPOSITE: f32 = 5.0;
 
 struct PreparedCard {
     #[allow(dead_code)]
     buf: wgpu::Buffer,
     uniform_bg: wgpu::BindGroup,
     tex_bg: wgpu::BindGroup,
-    /// 0 card, 1 reflection, 2 floor.
+    /// Draw group: 0 card, 1 reflection-buffer card, 2 floor, 3 badge, 4 wall,
+    /// 5 reflection composite.
     kind: u8,
+    #[allow(dead_code)]
     z: f32,
 }
 
+/// Offscreen target the mirrored cards render into (with depth) so reflections
+/// occlude each other exactly like the cards above, before being composited and
+/// faded over the floor as one layer.
+struct ReflectionTarget {
+    #[allow(dead_code)]
+    color: wgpu::Texture,
+    color_view: wgpu::TextureView,
+    depth_view: wgpu::TextureView,
+    /// Bind group sampling `color_view` for the composite pass.
+    composite_bg: wgpu::BindGroup,
+    size: (u32, u32),
+}
+
 pub struct CoverFlowPipeline {
+    format: wgpu::TextureFormat,
     card_pipeline: wgpu::RenderPipeline,
     reflection_pipeline: wgpu::RenderPipeline,
     uniform_bgl: wgpu::BindGroupLayout,
@@ -165,6 +239,7 @@ pub struct CoverFlowPipeline {
     dummy_view: wgpu::TextureView,
     cache: HashMap<u64, (wgpu::Texture, wgpu::TextureView)>,
     depth: Option<(wgpu::TextureView, (u32, u32))>,
+    reflection: Option<ReflectionTarget>,
     frames: Mutex<Vec<PreparedCard>>,
 }
 
@@ -172,11 +247,6 @@ impl std::fmt::Debug for CoverFlowPipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("CoverFlowPipeline")
     }
-}
-
-fn smoothstep(edge0: f32, edge1: f32, x: f32) -> f32 {
-    let t = ((x - edge0) / (edge1 - edge0)).clamp(0.0, 1.0);
-    t * t * (3.0 - 2.0 * t)
 }
 
 fn handle_hash(handle: &iced_image::Handle) -> u64 {
@@ -320,6 +390,7 @@ impl CoverFlowPipeline {
         let dummy_view = dummy.create_view(&wgpu::TextureViewDescriptor::default());
 
         Self {
+            format,
             card_pipeline,
             reflection_pipeline,
             uniform_bgl,
@@ -328,8 +399,65 @@ impl CoverFlowPipeline {
             dummy_view,
             cache: HashMap::new(),
             depth: None,
+            reflection: None,
             frames: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Ensure the offscreen reflection target (colour + depth) matches `size`.
+    fn ensure_reflection_target(&mut self, device: &wgpu::Device, size: (u32, u32)) {
+        let size = (size.0.max(1), size.1.max(1));
+        if self.reflection.as_ref().map(|r| r.size) == Some(size) {
+            return;
+        }
+        let extent = wgpu::Extent3d {
+            width: size.0,
+            height: size.1,
+            depth_or_array_layers: 1,
+        };
+        let color = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cover_flow reflection color"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: self.format,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let color_view = color.create_view(&wgpu::TextureViewDescriptor::default());
+        let depth = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("cover_flow reflection depth"),
+            size: extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+        let depth_view = depth.create_view(&wgpu::TextureViewDescriptor::default());
+        let composite_bg = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("cover_flow reflection composite bg"),
+            layout: &self.tex_bgl,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&color_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+            ],
+        });
+        self.reflection = Some(ReflectionTarget {
+            color,
+            color_view,
+            depth_view,
+            composite_bg,
+            size,
+        });
     }
 
     /// Upload (once) and cache a texture for `handle`; returns its cache id.
@@ -357,7 +485,10 @@ impl CoverFlowPipeline {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            // The surface is non-sRGB (Bgra8Unorm) and stores sRGB-encoded values
+            // directly, so sample the thumbnail WITHOUT an sRGB->linear decode
+            // (an Srgb texture darkened everything — navy read as black).
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
@@ -492,7 +623,39 @@ impl CoverFlowPipeline {
 
         let mut prepared = Vec::new();
 
-        // Floor / table: a screen-space quad behind everything.
+        // Wall + floor are screen-space quads; they carry the widget pixel size
+        // (uv_offset) and corner radius (uv_scale.x) for SDF-rounded corners.
+        let scale = viewport.scale_factor() as f32;
+        let size_px = [bounds.width * scale, bounds.height * scale];
+        let radius_px = 18.0 * scale;
+        self.ensure_reflection_target(
+            device,
+            (size_px[0].max(1.0) as u32, size_px[1].max(1.0) as u32),
+        );
+
+        // Table top = where the focal card's base projects, so the card sits on
+        // it with no gap; the reflection fades from there to `table_bottom`.
+        let table_top = camera::focal_base_uv_y(aspect);
+        let table_bottom = (table_top + 0.42).min(1.0);
+
+        // Wall: rounded-rect background behind the cards.
+        if prim.wall[3] > 0.0 {
+            self.push_card(
+                &mut prepared,
+                device,
+                queue,
+                camera::identity_mat(),
+                4,
+                size_px,
+                [radius_px, 0.0],
+                prim.wall,
+                [1.0, 0.0, KIND_WALL, 1.0],
+                None,
+                f32::INFINITY,
+            );
+        }
+
+        // Floor / table: solid band at the bottom with rounded bottom corners.
         if prim.table[3] > 0.0 {
             self.push_card(
                 &mut prepared,
@@ -500,10 +663,28 @@ impl CoverFlowPipeline {
                 queue,
                 camera::identity_mat(),
                 2,
-                [0.0, 0.0],
-                [1.0, 1.0],
+                size_px,
+                [radius_px, table_top],
                 prim.table,
                 [1.0, 0.0, KIND_FLOOR, 1.0],
+                None,
+                f32::INFINITY,
+            );
+        }
+
+        // Reflection composite: a full-screen quad that samples the mirror buffer
+        // (its texture is bound in render()) and fades it from the table top down.
+        if prim.reflection {
+            self.push_card(
+                &mut prepared,
+                device,
+                queue,
+                camera::identity_mat(),
+                5,
+                [0.0, 0.0],
+                [table_top, table_bottom],
+                [0.0, 0.0, 0.0, 0.0],
+                [1.0, 1.0, KIND_REFLECTION_COMPOSITE, 1.0],
                 None,
                 f32::INFINITY,
             );
@@ -515,8 +696,10 @@ impl CoverFlowPipeline {
                 continue;
             }
             let p = camera::placement(card.d);
-            let opacity = 1.0 - smoothstep(VISIBLE_SPAN - 1.5, VISIBLE_SPAN, ad);
-            let dim = 1.0 - 0.42 * (ad.min(1.5) / 1.5);
+            // Cards stay fully opaque (they pack into the edge deck rather than
+            // fading away) and dim only modestly so the scene stays bright.
+            let opacity = 1.0;
+            let dim = 1.0 - 0.25 * (ad.min(1.5) / 1.5);
 
             let tex_id = card
                 .handle
@@ -551,6 +734,8 @@ impl CoverFlowPipeline {
                 p.z,
             );
             if prim.reflection {
+                // Mirrored card, drawn OPAQUE into the reflection buffer (group
+                // 1, shader kind = card) so reflections occlude each other.
                 self.push_card(
                     &mut prepared,
                     device,
@@ -560,8 +745,29 @@ impl CoverFlowPipeline {
                     uv_offset,
                     uv_scale,
                     card.tint,
-                    [opacity, has_tex, KIND_REFLECTION, dim],
+                    [opacity, has_tex, KIND_CARD, dim],
                     tex_id,
+                    p.z,
+                );
+            }
+
+            // App-icon badge at the card's bottom-centre.
+            if let Some(badge_id) = card
+                .badge
+                .as_ref()
+                .and_then(|h| self.ensure_texture(device, queue, h))
+            {
+                self.push_card(
+                    &mut prepared,
+                    device,
+                    queue,
+                    camera::mul(vp, camera::badge_model(&p, half_w)),
+                    3, // kind: badge
+                    [0.0, 0.0],
+                    [1.0, 1.0],
+                    card.tint,
+                    [opacity, 1.0, KIND_BADGE, 1.0],
+                    Some(badge_id),
                     p.z,
                 );
             }
@@ -579,11 +785,57 @@ impl CoverFlowPipeline {
         let Some((depth_view, _)) = self.depth.as_ref() else {
             return;
         };
+        let Some(rt) = self.reflection.as_ref() else {
+            return;
+        };
         let mut frames = self.frames.lock().unwrap();
         if frames.is_empty() {
             return;
         }
 
+        let order: Vec<usize> = (0..frames.len()).collect();
+
+        // Pass A — render the mirrored cards (group 1) OPAQUE with depth into the
+        // offscreen reflection buffer, so they occlude each other exactly like
+        // the cards above (a true mirror; overlaps don't compound).
+        {
+            let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("cover_flow reflection buffer"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &rt.color_view,
+                    resolve_target: None,
+                    depth_slice: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &rt.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            rpass.set_viewport(0.0, 0.0, rt.size.0 as f32, rt.size.1 as f32, 0.0, 1.0);
+            rpass.set_pipeline(&self.card_pipeline);
+            for &i in &order {
+                if frames[i].kind != 1 {
+                    continue;
+                }
+                rpass.set_bind_group(0, &frames[i].uniform_bg, &[]);
+                rpass.set_bind_group(1, &frames[i].tex_bg, &[]);
+                rpass.draw(0..6, 0..1);
+            }
+        }
+
+        // Pass B — main target: wall, floor, the reflection composite (faded
+        // mirror buffer over the floor), opaque cards, then badges.
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("cover_flow pass"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -623,22 +875,13 @@ impl CoverFlowPipeline {
             clip_bounds.height,
         );
 
-        // Far -> near so alpha blends correctly (camera looks down -Z, so a more
-        // negative z is further away).
-        let mut order: Vec<usize> = (0..frames.len()).collect();
-        order.sort_by(|&a, &b| {
-            frames[a]
-                .z
-                .partial_cmp(&frames[b].z)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // Floor/table behind everything (no depth write), then opaque cards
-        // (write depth), then reflections (depth-test only). `kind` order: 2,0,1.
+        // `kind` order: 4 wall, 2 floor, 5 reflection composite, 0 card, 3 badge.
         for (pipeline, kind) in [
+            (&self.reflection_pipeline, 4u8),
             (&self.reflection_pipeline, 2u8),
+            (&self.reflection_pipeline, 5u8),
             (&self.card_pipeline, 0u8),
-            (&self.reflection_pipeline, 1u8),
+            (&self.reflection_pipeline, 3u8),
         ] {
             pass.set_pipeline(pipeline);
             for &i in &order {
@@ -646,7 +889,12 @@ impl CoverFlowPipeline {
                     continue;
                 }
                 pass.set_bind_group(0, &frames[i].uniform_bg, &[]);
-                pass.set_bind_group(1, &frames[i].tex_bg, &[]);
+                let tex = if kind == 5 {
+                    &rt.composite_bg
+                } else {
+                    &frames[i].tex_bg
+                };
+                pass.set_bind_group(1, tex, &[]);
                 pass.draw(0..6, 0..1);
             }
         }

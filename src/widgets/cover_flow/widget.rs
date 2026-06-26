@@ -29,6 +29,7 @@ const DEFAULT_HEIGHT: f32 = 360.0;
 #[derive(Clone)]
 pub struct CoverFlowItem {
     handle: Option<image::Handle>,
+    badge: Option<image::Handle>,
     tint: [f32; 4],
 }
 
@@ -36,6 +37,7 @@ impl CoverFlowItem {
     pub fn image(handle: image::Handle) -> Self {
         Self {
             handle: Some(handle),
+            badge: None,
             // White composite background: brightens frosted/translucent windows
             // (premultiplied) while leaving opaque ones unchanged.
             tint: [1.0, 1.0, 1.0, 1.0],
@@ -46,8 +48,15 @@ impl CoverFlowItem {
     pub fn fallback(color: Color) -> Self {
         Self {
             handle: None,
+            badge: None,
             tint: [color.r, color.g, color.b, color.a],
         }
+    }
+
+    /// Attach an app-icon badge (premultiplied RGBA) drawn on the card.
+    pub fn badge(mut self, handle: image::Handle) -> Self {
+        self.badge = Some(handle);
+        self
     }
 }
 
@@ -188,6 +197,7 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer> for Cover
             .enumerate()
             .map(|(i, item)| CoverCard {
                 handle: item.handle.clone(),
+                badge: item.badge.clone(),
                 // Image cards: theme bg for transparent margins. Fallback cards:
                 // their own flat colour.
                 tint: if item.handle.is_some() {
@@ -199,12 +209,16 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer> for Cover
             })
             .collect();
 
-        // Table: solid white floor under the cards.
+        // Table: solid white floor under the cards (toggleable via `.table`).
         let table = if self.table {
             [1.0, 1.0, 1.0, 1.0]
         } else {
             [0.0, 0.0, 0.0, 0.0]
         };
+
+        // Wall: the spotlight's centre colour (a neutral light grey), always on.
+        // The shader fades it radially to a dark edge so the focused card pops.
+        let wall = [0.58, 0.60, 0.63, 1.0];
 
         renderer.draw_primitive(
             bounds,
@@ -212,6 +226,7 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer> for Cover
                 cards,
                 reflection: self.reflection,
                 table,
+                wall,
             },
         );
     }
