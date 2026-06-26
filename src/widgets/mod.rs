@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
+#[cfg(feature = "cover-flow")]
+pub mod cover_flow;
 pub mod expandable_fisheye_row;
 pub mod fisheye_row;
 pub mod flex_row;
@@ -12,6 +14,8 @@ pub mod scrubber;
 pub mod spinner;
 pub mod toggle;
 
+#[cfg(feature = "cover-flow")]
+pub use cover_flow::{CoverFlow, CoverFlowItem, cover_flow};
 pub use expandable_fisheye_row::{ExpandableFisheyeRow, expandable_fisheye_row};
 pub use fisheye_row::{FisheyeRow, fisheye_row};
 pub use flex_row::{FlexRow, flex_row};

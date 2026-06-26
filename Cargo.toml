@@ -14,6 +14,7 @@ image-container = [
     "dep:libblur",
 ]
 styled-text-renderer = ["dep:image_crate", "dep:libblur", "dep:cosmic-text"]
+cover-flow = ["dep:bytemuck", "dep:iced_wgpu"]
 
 [dependencies]
 num-traits = "0.2"

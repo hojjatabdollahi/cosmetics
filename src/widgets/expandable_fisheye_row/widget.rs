@@ -455,30 +455,21 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer>
         let cosmic_theme = theme.cosmic();
         let accent: Color = cosmic_theme.accent_color().into();
         let r_s = cosmic_theme.corner_radii.radius_s[0];
-        let highlight_color = Color { a: 0.18, ..accent };
         let shade: Color = cosmic_theme.shade.into();
-        let shadow_color = Color { a: 0.28, ..shade };
         let cap_bg: Color = cosmic_theme.bg_component_color().into();
 
         let Some(widget_clip) = bounds.intersection(viewport) else {
             return;
         };
 
-        // Z-order: draw items further from the pivot first so the focal item
-        // overlaps its neighbours.
+        // Draw order: items furthest from the focal item first, so the focal
+        // card's shadow layers cleanly over its neighbours.
         let pivot = hovered.unwrap_or(active);
         let mut order: Vec<usize> = (win.start..win.start + win.count).collect();
         order.sort_by_key(|&i| -((i as i64 - pivot as i64).abs()));
 
-        let radius_for = |i: usize| -> [f32; 4] {
-            if i < pivot {
-                [r_s, 0.0, 0.0, r_s]
-            } else if i > pivot {
-                [0.0, r_s, r_s, 0.0]
-            } else {
-                [r_s; 4]
-            }
-        };
+        let radius_m = cosmic_theme.corner_radii.radius_m[0];
+        let card_shadow = Color { a: 0.45, ..shade };
 
         renderer.with_layer(widget_clip, |renderer| {
             for i in order.iter().copied() {
@@ -487,58 +478,53 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer>
                 if zone_w <= 0.0 {
                     continue;
                 }
-                let zone_right = zone_left + zone_w;
-                let child_size = child_layouts[i].bounds().size();
-                let target_local = (zone_left + zone_right) * 0.5;
-                let dx = target_local - child_size.width * 0.5;
-                let dy = (bounds.height - child_size.height) * 0.5;
 
-                let zone_rect = Rectangle {
-                    x: bounds.x + zone_left,
-                    y: bounds.y,
-                    width: zone_w,
-                    height: bounds.height,
+                // Inset each zone into a free-standing rounded card with a gap
+                // to its neighbours, so items read as distinct tiles.
+                let gap = 8.0_f32.min(zone_w * 0.4);
+                let inset_y = 5.0_f32.min(bounds.height * 0.12);
+                let card = Rectangle {
+                    x: bounds.x + zone_left + gap * 0.5,
+                    y: bounds.y + inset_y,
+                    width: (zone_w - gap).max(1.0),
+                    height: (bounds.height - inset_y * 2.0).max(1.0),
                 };
-                let Some(item_clip) = zone_rect.intersection(&widget_clip) else {
+                let Some(item_clip) = card.intersection(&widget_clip) else {
                     continue;
                 };
-                let item_radius = radius_for(i);
 
+                let child_size = child_layouts[i].bounds().size();
+                let dx = zone_left + zone_w * 0.5 - child_size.width * 0.5;
+                let dy = (bounds.height - child_size.height) * 0.5;
+
+                let is_active = i == active;
+                let is_hovered = Some(i) == hovered;
+                let card_bg = if is_active {
+                    mix(cap_bg, accent, 0.18)
+                } else {
+                    cap_bg
+                };
+
+                // Opaque card + drop shadow: the separation between tiles.
                 renderer.fill_quad(
                     renderer::Quad {
-                        bounds: zone_rect,
+                        bounds: card,
                         border: Border {
-                            radius: item_radius.into(),
+                            radius: radius_m.into(),
                             width: 0.0,
                             color: Color::TRANSPARENT,
                         },
                         shadow: Shadow {
-                            color: shadow_color,
-                            offset: Vector::new(0.0, 3.0),
-                            blur_radius: 8.0,
+                            color: card_shadow,
+                            offset: Vector::new(0.0, 4.0),
+                            blur_radius: 12.0,
                         },
                         snap: false,
                     },
-                    Background::Color(Color::TRANSPARENT),
+                    Background::Color(card_bg),
                 );
 
                 renderer.with_layer(item_clip, |renderer| {
-                    if i == active {
-                        renderer.fill_quad(
-                            renderer::Quad {
-                                bounds: zone_rect,
-                                border: Border {
-                                    radius: item_radius.into(),
-                                    width: 0.0,
-                                    color: Color::TRANSPARENT,
-                                },
-                                shadow: Shadow::default(),
-                                snap: false,
-                            },
-                            Background::Color(highlight_color),
-                        );
-                    }
-
                     renderer.with_translation(Vector::new(dx, dy), |renderer| {
                         self.children[i].as_widget().draw(
                             &tree.children[i],
@@ -551,22 +537,34 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer>
                         );
                     });
 
-                    if Some(i) == hovered {
-                        renderer.fill_quad(
-                            renderer::Quad {
-                                bounds: zone_rect,
-                                border: Border {
-                                    radius: item_radius.into(),
-                                    width: 1.5,
-                                    color: accent,
-                                },
-                                shadow: Shadow::default(),
-                                snap: false,
-                            },
-                            Background::Color(Color::TRANSPARENT),
-                        );
-                    }
+                    // Fade content into the card's side edges so a narrow
+                    // (compressed) tile's title dissolves instead of being
+                    // hard-clipped against its neighbour.
+                    fade_card_edges(renderer, card, card_bg, radius_m, 22.0);
                 });
+
+                // Selection / hover ring, drawn unclipped so the edge fade
+                // doesn't eat it.
+                if is_active || is_hovered {
+                    let (width, color) = if is_active {
+                        (2.0, accent)
+                    } else {
+                        (1.25, Color { a: 0.7, ..accent })
+                    };
+                    renderer.fill_quad(
+                        renderer::Quad {
+                            bounds: card,
+                            border: Border {
+                                radius: radius_m.into(),
+                                width,
+                                color,
+                            },
+                            shadow: Shadow::default(),
+                            snap: false,
+                        },
+                        Background::Color(Color::TRANSPARENT),
+                    );
+                }
             }
 
             // Overflow caps: collapse the hidden items on each side into a tab
@@ -808,6 +806,74 @@ impl<'a, Message: 'a> Widget<Message, cosmic::Theme, cosmic::Renderer>
         } else {
             mouse::Interaction::default()
         }
+    }
+}
+
+/// Linear blend of two colors, keeping `a`'s alpha.
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    Color {
+        r: a.r + (b.r - a.r) * t,
+        g: a.g + (b.g - a.g) * t,
+        b: a.b + (b.b - a.b) * t,
+        a: a.a,
+    }
+}
+
+/// Overlay `color` over the left and right edges of `card`, opaque at the very
+/// edge and fading to transparent `fade_w` pixels inward, so clipped content
+/// (notably a title) dissolves into the card rather than colliding with the
+/// neighbouring tile. The vertical inset by `radius` keeps the rounded corners
+/// clean.
+fn fade_card_edges(
+    renderer: &mut cosmic::Renderer,
+    card: Rectangle,
+    color: Color,
+    radius: f32,
+    fade_w: f32,
+) {
+    let fade_w = fade_w.min(card.width * 0.45);
+    if fade_w <= 0.5 || card.height <= 2.0 * radius {
+        return;
+    }
+    let y = card.y + radius;
+    let height = card.height - 2.0 * radius;
+    let steps = 10;
+    let step_w = fade_w / steps as f32;
+    for s in 0..steps {
+        // Opaque at the outer edge (t = 0), transparent inward (t -> 1).
+        let t = s as f32 / (steps - 1).max(1) as f32;
+        let c = Color {
+            a: (1.0 - t) * color.a,
+            ..color
+        };
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds: Rectangle {
+                    x: card.x + s as f32 * step_w,
+                    y,
+                    width: step_w + 0.75,
+                    height,
+                },
+                border: Border::default(),
+                shadow: Shadow::default(),
+                snap: false,
+            },
+            Background::Color(c),
+        );
+        renderer.fill_quad(
+            renderer::Quad {
+                bounds: Rectangle {
+                    x: card.x + card.width - (s as f32 + 1.0) * step_w,
+                    y,
+                    width: step_w + 0.75,
+                    height,
+                },
+                border: Border::default(),
+                shadow: Shadow::default(),
+                snap: false,
+            },
+            Background::Color(c),
+        );
     }
 }
 
